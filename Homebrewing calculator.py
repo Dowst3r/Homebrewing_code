@@ -272,10 +272,10 @@ def show_output_window(root):
             m_fermaid_o = None
 
         # Back-sweetening calculation
-        sg_reached = 1.000  # Assumed dry value
-        V_mead_gal = volume_l / 4.546
-        V_honey_back = ((final_gravity_desired - sg_reached) * V_mead_gal) / ((density / 1000) - final_gravity_desired)
-        m_honey_back = density * V_honey_back * 4.546 / 1000  # in kg
+        imaginary_ABV_for_desired_final_sweetness = (1.05 / 0.79) * ((final_gravity_desired - 1) / 1) * 100
+        mass_ethanol_sweetening = ((volume_l / 1000) * rho_eth * imaginary_ABV_for_desired_final_sweetness) / 100
+        mass_honey_needed_for_sweetening = (((1 / (1 - Y_xs)) * (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) +
+                              F_sp * volume_l) * 1000) / (sugar_conc / 100)) / fraction_fermentable if sugar_conc else 0
 
         # Output
         output = tk.Toplevel(root)
@@ -295,7 +295,6 @@ Brix Estimate: {brix:.1f}
 
 Total Sugar Needed: {total_sugar_needed:.1f} g
 Honey Required: {total_honey_kg * 1000:.2f} g
-Volume of Honey: {volume_honey:.2f} L
 Estimated Cost: £{cost:.2f}
 Volume of Water to Add: {volume_l - volume_honey:.2f} L
 """
@@ -308,10 +307,8 @@ Fermaid-O Required: {m_fermaid_o:.2f} g divided into 4 doses from day 0 to 3
 
         result_text += f"""
 --- Honey for Back-Sweetening ---
-Final Gravity Reached (dry): {sg_reached:.3f}
 Back-Sweetening Target FG: {final_gravity_desired:.3f}
-Honey Volume Required: {V_honey_back:.2f} gal
-Honey Mass Required: {m_honey_back * 1000:.1f} g
+Honey Mass Required: {mass_honey_needed_for_sweetening * 1000:.1f} g
 """
 
         text_widget = tk.Text(output, wrap="word")
