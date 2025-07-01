@@ -4,6 +4,11 @@ import tkinter as tk
 import tkinter.messagebox
 import json
 import os
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
+from scipy.integrate import solve_ivp
+from scipy.optimize import fsolve
 
 
 HONEY_DATA_FILE = "honey_data.json"
@@ -39,6 +44,7 @@ def show_home_screen(root):
     ttk.Label(root, text="Welcome to Mead Helper!", font=("Arial", 16)).pack(pady=20)
     ttk.Button(root, text="Mead Recipe", command=lambda: show_mead_recipe_screen(root)).pack(pady=20)
     ttk.Button(root, text="pH Adjustment", command=lambda: show_ph_adjustment_screen(root)).pack(pady=20)
+    ttk.Button(root, text="Fermentation tracking", command=lambda: show_fermentation_tracking_screen(root)).pack(pady=20)
 
 def show_mead_recipe_screen(root):
     clear_screen(root)
@@ -46,7 +52,7 @@ def show_mead_recipe_screen(root):
     top_bar = ttk.Frame(root)
     top_bar.pack(fill='x', padx=10, pady=5)
 
-    ttk.Button(top_bar, text="Back", command=lambda: show_home_screen(root)).pack(side='left')
+    ttk.Button(top_bar, text="Back", command=lambda: show_home_screen(root), bootstyle="success large").pack(side='left')
     ttk.Button(top_bar, text="Calculate", command=lambda: show_output_window(root), bootstyle="success large").pack(side='right')
 
     main_frame = ttk.Frame(root)
@@ -398,7 +404,206 @@ Mass CaCO₃ required: {mass_CaCO3:.4f} g
             tk.messagebox.showerror("Error", f"Invalid input:\n{e}")
 
     ttk.Button(btn_frame, text="Calculate", width=20, command=calculate_ph_adjustment, bootstyle="success large").pack(pady=5)
-    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root)).pack()
+    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root), bootstyle="success large").pack()
+
+
+def show_fermentation_tracking_screen(root):
+
+    clear_screen(root)
+
+    ttk.Label(root, text="Fermentation Tracking", font=("Arial", 16)).pack(pady=10)
+
+    container = ttk.Frame(root)
+    container.pack(pady=10, padx=20, fill="both", expand=True)
+
+    # Left Side - Entry Table
+    left_frame = ttk.Frame(container)
+    left_frame.pack(side="left", padx=20, pady=10)
+
+    ttk.Label(left_frame, text="Time (days)").grid(row=0, column=0, padx=5, pady=5)
+    ttk.Label(left_frame, text="SG").grid(row=0, column=1, padx=5, pady=5)
+
+    time_entries = []
+    sg_entries = []
+
+    for i in range(6):
+        time_entry = ttk.Entry(left_frame, width=10)
+        sg_entry = ttk.Entry(left_frame, width=10)
+        time_entry.grid(row=i+1, column=0, padx=5, pady=2)
+        sg_entry.grid(row=i+1, column=1, padx=5, pady=2)
+        time_entries.append(time_entry)
+        sg_entries.append(sg_entry)
+
+    # Right Side - Graph Area
+    right_frame = ttk.Frame(container)
+    right_frame.pack(side="right", padx=20, pady=30, fill="both", expand=True)
+
+    fig = Figure(figsize=(6, 4), dpi=100)
+    ax1 = fig.add_subplot(211)  # Top graph
+    ax2 = fig.add_subplot(212)  # Bottom graph
+
+    fig.tight_layout(pad=2.0)
+
+    canvas = FigureCanvasTkAgg(fig, master=right_frame)
+    canvas.get_tk_widget().pack(fill="both", expand=True)
+
+
+    def calculate_graphs():
+        times = []
+        sgs = []
+        for i in range(6):
+            try:
+                t = float(time_entries[i].get())
+                sg = float(sg_entries[i].get())
+                times.append(t)
+                sgs.append(sg)
+            except ValueError:
+                continue
+
+        if len(times) < 2:
+            tk.messagebox.showerror("Input Error", "Please enter at least 2 valid data points.")
+            return
+
+        # Sort input
+        paired = sorted(zip(times, sgs))
+        times, sgs = zip(*paired)
+
+        SG_min = 1.000
+        SG_max = max(sgs)
+
+        # --- Model A: Logistic Fit ---
+        def equations(x):
+            k, t0 = x
+            return [
+                SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (times[0] - t0))) - sgs[0],
+                SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (times[-1] - t0))) - sgs[-1]
+            ]
+
+        try:
+            sol = fsolve(equations, [-2.0, times[-1] / 2])
+            k, t0 = sol
+            t_fit = np.linspace(0, max(times) + 5, 200)
+            sg_fit = SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (t_fit - t0)))
+
+            ax1.clear()
+            ax1.plot(t_fit, sg_fit, 'b-', label='Logistic Fit')
+            ax1.scatter(times, sgs, color='red', label='Measured')
+            ax1.set_title("Graph 1: Logistic SG Fit")
+            ax1.set_xlabel("Time (days)")
+            ax1.set_ylabel("SG")
+            ax1.legend()
+            ax1.grid(True)
+        except Exception as e:
+            ax1.clear()
+            ax1.text(0.1, 0.5, f"Logistic model failed:\n{e}", color='red')
+
+                # --- Model B: Monod-like ODE with Parameter Fitting ---
+        try:
+            from scipy.optimize import minimize
+
+            X0 = 0.1          # fixed yeast concentration (g/L)
+            YXS = 0.5         # yield coefficient
+            k_e = 0.0004      # sugar to SG conversion
+
+            measured_t = np.array(times)
+            measured_sg = np.array(sgs)
+
+            def simulate_monod(mu_max, Ks, S0):
+                def dXdt(t, y):
+                    X, S = y
+                    mu = mu_max * S / (Ks + S)
+                    dX = mu * X
+                    dS = -dX / YXS
+                    return [dX, dS]
+
+                sol = solve_ivp(dXdt, [0, max(measured_t) + 5], [X0, S0], t_eval=measured_t, method="RK45", max_step=0.1)
+                SG_pred = 1.000 + sol.y[1] * k_e
+                return SG_pred
+
+            def objective(params):
+                mu_max, Ks, S0 = params
+                if mu_max <= 0 or Ks <= 0 or S0 <= 0:
+                    return np.inf
+                try:
+                    SG_pred = simulate_monod(mu_max, Ks, S0)
+                    return np.sum((SG_pred - measured_sg) ** 2)
+                except:
+                    return np.inf
+
+            # Initial guess and bounds
+            initial_guess = [0.4, 1.0, 100.0]
+            bounds = [(0.01, 2.0), (0.01, 10.0), (1.0, 300.0)]
+
+            result = minimize(objective, initial_guess, bounds=bounds)
+
+            if result.success:
+                mu_opt, Ks_opt, S0_opt = result.x
+                t_fit = np.linspace(0, max(times) + 5, 200)
+
+                def dXdt(t, y):
+                    X, S = y
+                    mu = mu_opt * S / (Ks_opt + S)
+                    dX = mu * X
+                    dS = -dX / YXS
+                    return [dX, dS]
+
+                sol = solve_ivp(dXdt, [0, max(times) + 5], [X0, S0_opt], t_eval=t_fit, method="RK45", max_step=0.1)
+                SG_fit = 1.000 + sol.y[1] * k_e
+
+                ax2.clear()
+                ax2.plot(sol.t, SG_fit, color='green', label='Monod SG Fit')
+                ax2.scatter(times, sgs, color='red', label='Measured')
+                ax2.set_title("Graph 2: Fitted Monod SG Model")
+                ax2.set_xlabel("Time (days)")
+                ax2.set_ylabel("SG")
+                ax2.legend()
+                ax2.grid(True)
+            else:
+                raise RuntimeError("Fitting failed")
+
+        except Exception as e:
+            ax2.clear()
+            ax2.text(0.1, 0.5, f"Monod fit failed:\n{e}", color='red')
+
+        canvas.draw()
+
+                # --- Predict SG at specific time if input provided ---
+        try:
+            predict_time = float(predict_time_entry.get())
+            if predict_time < 0:
+                raise ValueError("Time must be non-negative.")
+
+            # Logistic model prediction
+            sg_log = SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (predict_time - t0)))
+            sg_logistic_label.config(text=f"Logistic SG: {sg_log:.4f}")
+            
+            # Monod model prediction
+            sol_pred = solve_ivp(dXdt, [0, predict_time], [X0, S0_opt], t_eval=[predict_time])
+            sg_monod = 1.000 + sol_pred.y[1][-1] * k_e
+            sg_monod_label.config(text=f"Monod SG: {sg_monod:.4f}")
+
+        except ValueError:
+            sg_logistic_label.config(text="Logistic SG: —")
+            sg_monod_label.config(text="Monod SG: —")
+
+    # Bottom Buttons
+    ttk.Button(left_frame, text="Calculate", command=calculate_graphs, bootstyle="success large").grid(row=7, column=0, columnspan=2, pady=10)
+
+        # Time prediction input
+    ttk.Label(left_frame, text="Predict SG at time:").grid(row=8, column=0, padx=5, pady=(15, 2), sticky="w")
+    predict_time_entry = ttk.Entry(left_frame, width=10)
+    predict_time_entry.grid(row=8, column=1, padx=5, pady=(15, 2))
+
+    sg_logistic_label = ttk.Label(left_frame, text="Logistic SG: —")
+    sg_logistic_label.grid(row=9, column=0, columnspan=2, sticky="w", padx=5)
+
+    sg_monod_label = ttk.Label(left_frame, text="Monod SG: —")
+    sg_monod_label.grid(row=10, column=0, columnspan=2, sticky="w", padx=5)
+
+
+    btn_frame = ttk.Frame(root)
+    btn_frame.pack(pady=10)
+    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root), bootstyle="success large").pack()
 
 
 def main():
