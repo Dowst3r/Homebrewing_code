@@ -251,8 +251,9 @@ def show_output_window(root):
 
         # Gravity and sugar calculations
         starting_gravity = ((ABV_desired * 0.79) / (100 * 1.05) + 1)
-        total_sugar_needed = ((starting_gravity - 1) / 0.000384) * volume_l
         mass_ethanol = ((volume_l / 1000) * rho_eth * ABV_desired) / 100
+        total_sugar_needed = ((1 / (1 - Y_xs)) * (mass_ethanol * (1 + (MW_CO2 / MW_eth)) +
+                     F_sp * volume_l) * 1000)
         test_mass_honey = (((1 / (1 - Y_xs)) * (mass_ethanol * (1 + (MW_CO2 / MW_eth)) +
                               F_sp * volume_l) * 1000) / (sugar_conc / 100)) / fraction_fermentable if sugar_conc else 0
 
@@ -280,6 +281,8 @@ def show_output_window(root):
         # Back-sweetening calculation
         imaginary_ABV_for_desired_final_sweetness = (1.05 / 0.79) * ((final_gravity_desired - 1) / 1) * 100
         mass_ethanol_sweetening = ((volume_l / 1000) * rho_eth * imaginary_ABV_for_desired_final_sweetness) / 100
+        mass_pure_sugar_needed_for_sweetening = ((1 / (1 - Y_xs)) * (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) +
+                     F_sp * volume_l) * 1000)
         mass_honey_needed_for_sweetening = (((1 / (1 - Y_xs)) * (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) +
                               F_sp * volume_l) * 1000) / (sugar_conc / 100)) / fraction_fermentable if sugar_conc else 0
 
@@ -290,19 +293,19 @@ def show_output_window(root):
         ttk.Label(output, text="Calculation Results", font=("Arial", 14)).pack(pady=10)
 
         result_text = f"""
-Honey Type: {honey_name or 'Unknown'}
+Honey type: {honey_name or 'Unknown'}
 Yeast: {yeast_name or 'Unknown'} (N Requirement: {n_req})
-Fruit Used: {'Yes - ' + fruit_type if fruit_used else 'No'}
+Fruit used: {'Yes - ' + fruit_type if fruit_used else 'No'}
 
 Desired ABV: {ABV_desired:.1f}%
-Final Gravity Target: {final_gravity_desired:.3f}
-Starting Gravity Estimate: {starting_gravity:.3f}
-Brix Estimate: {brix:.1f}
+Final gravity target: {final_gravity_desired:.3f}
+Starting gravity estimate: {starting_gravity:.3f}
+Brix estimate: {brix:.1f}
 
-Total Sugar Needed: {total_sugar_needed:.1f} g
-Honey Required: {total_honey_kg * 1000:.2f} g
-Estimated Cost: £{cost:.2f}
-Volume of Water to Add: {volume_l - volume_honey:.2f} L
+Total pure sugar needed: {total_sugar_needed:.1f} g
+Honey required: {total_honey_kg * 1000:.2f} g
+Estimated cost: £{cost:.2f}
+Volume of water to add: {volume_l - volume_honey:.2f} L
 """
 
         if m_fermaid_o is not None:
@@ -314,7 +317,8 @@ Fermaid-O Required: {m_fermaid_o:.2f} g divided into 4 doses from day 0 to 3
         result_text += f"""
 --- Honey for Back-Sweetening ---
 Back-Sweetening Target FG: {final_gravity_desired:.3f}
-Honey Mass Required: {mass_honey_needed_for_sweetening * 1000:.1f} g
+Total pure sugar needed: {mass_pure_sugar_needed_for_sweetening:.2f} g
+Honey Mass Required: {mass_honey_needed_for_sweetening:.2f} g
 """
 
         text_widget = tk.Text(output, wrap="word")
