@@ -505,8 +505,8 @@ def show_fermentation_tracking_screen(root):
         try:
             from scipy.optimize import minimize
 
-            X0 = 0.1          # fixed yeast concentration (g/L)
-            YXS = 0.5         # yield coefficient
+            X0 = (float(mass_of_yeast.get()))/(float(volume_of_mead.get()))
+            YXS = 0.1         # yield coefficient
             k_e = 0.0004      # sugar to SG conversion
 
             measured_t = np.array(times)
@@ -520,7 +520,7 @@ def show_fermentation_tracking_screen(root):
                     dS = -dX / YXS
                     return [dX, dS]
 
-                sol = solve_ivp(dXdt, [0, max(measured_t) + 5], [X0, S0], t_eval=measured_t, method="RK45", max_step=0.1)
+                sol = solve_ivp(dXdt, [0, max(measured_t) + 5], [X0, S0], t_eval=measured_t, method="RK45", max_step=0.05)
                 SG_pred = 1.000 + sol.y[1] * k_e
                 return SG_pred
 
@@ -593,16 +593,25 @@ def show_fermentation_tracking_screen(root):
     # Bottom Buttons
     ttk.Button(left_frame, text="Calculate", command=calculate_graphs, bootstyle="success large").grid(row=7, column=0, columnspan=2, pady=10)
 
+    # inital concentration of yeast
+
+    ttk.Label(left_frame, text="Mass of yeast added (g)").grid(row=8, column=0, pady=5)
+    mass_of_yeast = ttk.Entry(left_frame, width=10)
+    mass_of_yeast.grid(row=8, column=1, padx=5)
+    ttk.Label(left_frame, text="Volume of mead being made (L)").grid(row=9, column=0)
+    volume_of_mead = ttk.Entry(left_frame, width=10)
+    volume_of_mead.grid(row=9, column=1, pady=10)
+
         # Time prediction input
-    ttk.Label(left_frame, text="Predict SG at time:").grid(row=8, column=0, padx=5, pady=(15, 2), sticky="w")
+    ttk.Label(left_frame, text="Predict SG at time:").grid(row=10, column=0, padx=5, pady=(15, 2), sticky="w")
     predict_time_entry = ttk.Entry(left_frame, width=10)
-    predict_time_entry.grid(row=8, column=1, padx=5, pady=(15, 2))
+    predict_time_entry.grid(row=10, column=1, padx=5, pady=(15, 2))
 
     sg_logistic_label = ttk.Label(left_frame, text="Logistic SG: —")
-    sg_logistic_label.grid(row=9, column=0, columnspan=2, sticky="w", padx=5)
+    sg_logistic_label.grid(row=11, column=0, columnspan=2, sticky="w", padx=5)
 
     sg_monod_label = ttk.Label(left_frame, text="Monod SG: —")
-    sg_monod_label.grid(row=10, column=0, columnspan=2, sticky="w", padx=5)
+    sg_monod_label.grid(row=12, column=0, columnspan=2, sticky="w", padx=5)
 
 
     btn_frame = ttk.Frame(root)
