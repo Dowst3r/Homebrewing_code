@@ -501,32 +501,42 @@ def show_fermentation_tracking_screen(root):
             ax1.clear()
             ax1.text(0.1, 0.5, f"Logistic model failed:\n{e}", color='red')
 
+
+
                 # --- Model B: Monod-like ODE with Parameter Fitting ---
         try:
             from scipy.optimize import minimize
 
             X0 = (float(mass_of_yeast.get()))/(float(volume_of_mead.get()))
+            S0 = (float(mass_of_sugar.get()))/(float(volume_of_mead.get()))
             YXS = 0.1         # yield coefficient
-            k_e = 0.0004      # sugar to SG conversion
 
             measured_t = np.array(times)
             measured_sg = np.array(sgs)
 
             def simulate_monod(mu_max, Ks, S0):
+                V_mead = float(volume_of_mead.get())
+                F_SP = 0.0128
+                rho_eth = 789.45
+                MW_CO2 = 44.01
+                MW_eth = 46.069
                 def dXdt(t, y):
                     X, S = y
+                    S = max(S, 0)
                     mu = mu_max * S / (Ks + S)
                     dX = mu * X
-                    dS = -dX / YXS
+                    dS = -dX / YXS if S > 0 else 0
                     return [dX, dS]
 
                 sol = solve_ivp(dXdt, [0, max(measured_t) + 5], [X0, S0], t_eval=measured_t, method="RK45", max_step=0.05)
-                SG_pred = 1.000 + sol.y[1] * k_e
+                SG_pred = 1 + (1 - YXS) * (sol.y[1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth))
+)
+
                 return SG_pred
 
             def objective(params):
-                mu_max, Ks, S0 = params
-                if mu_max <= 0 or Ks <= 0 or S0 <= 0:
+                mu_max, Ks = params
+                if mu_max <= 0 or Ks <= 0:
                     return np.inf
                 try:
                     SG_pred = simulate_monod(mu_max, Ks, S0)
@@ -535,14 +545,19 @@ def show_fermentation_tracking_screen(root):
                     return np.inf
 
             # Initial guess and bounds
-            initial_guess = [0.4, 1.0, 100.0]
-            bounds = [(0.01, 2.0), (0.01, 10.0), (1.0, 300.0)]
+            initial_guess = [0.4, 1.0]
+            bounds = [(0.001, 5.0), (0.01, 50.0)]
 
             result = minimize(objective, initial_guess, bounds=bounds)
 
             if result.success:
-                mu_opt, Ks_opt, S0_opt = result.x
+                mu_opt, Ks_opt = result.x
                 t_fit = np.linspace(0, max(times) + 5, 200)
+                V_mead = float(volume_of_mead.get())
+                F_SP = 0.0128
+                rho_eth = 789.45
+                MW_CO2 = 44.01
+                MW_eth = 46.069
 
                 def dXdt(t, y):
                     X, S = y
@@ -551,8 +566,10 @@ def show_fermentation_tracking_screen(root):
                     dS = -dX / YXS
                     return [dX, dS]
 
-                sol = solve_ivp(dXdt, [0, max(times) + 5], [X0, S0_opt], t_eval=t_fit, method="RK45", max_step=0.1)
-                SG_fit = 1.000 + sol.y[1] * k_e
+                sol = solve_ivp(dXdt, [0, max(times) + 5], [X0, S0], t_eval=t_fit, method="RK45", max_step=0.1)
+                SG_fit = 1 + (1 - YXS) * (sol.y[1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth))
+)
+
 
                 ax2.clear()
                 ax2.plot(sol.t, SG_fit, color='green', label='Monod SG Fit')
@@ -582,8 +599,9 @@ def show_fermentation_tracking_screen(root):
             sg_logistic_label.config(text=f"Logistic SG: {sg_log:.4f}")
             
             # Monod model prediction
-            sol_pred = solve_ivp(dXdt, [0, predict_time], [X0, S0_opt], t_eval=[predict_time])
-            sg_monod = 1.000 + sol_pred.y[1][-1] * k_e
+            sol_pred = solve_ivp(dXdt, [0, predict_time], [X0, S0], t_eval=[predict_time])
+            sg_monod = 1 + (1 - YXS) * (sol_pred.y[1][-1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)))
+
             sg_monod_label.config(text=f"Monod SG: {sg_monod:.4f}")
 
         except ValueError:
@@ -598,20 +616,23 @@ def show_fermentation_tracking_screen(root):
     ttk.Label(left_frame, text="Mass of yeast added (g)").grid(row=8, column=0, pady=5)
     mass_of_yeast = ttk.Entry(left_frame, width=10)
     mass_of_yeast.grid(row=8, column=1, padx=5)
-    ttk.Label(left_frame, text="Volume of mead being made (L)").grid(row=9, column=0)
+    ttk.Label(left_frame, text="Mass of sugar added (g)").grid(row=9, column=0, pady=5)
+    mass_of_sugar = ttk.Entry(left_frame, width=10)
+    mass_of_sugar.grid(row=9, column=1, padx=5)
+    ttk.Label(left_frame, text="Volume of mead being made (L)").grid(row=10, column=0)
     volume_of_mead = ttk.Entry(left_frame, width=10)
-    volume_of_mead.grid(row=9, column=1, pady=10)
+    volume_of_mead.grid(row=10, column=1, pady=10)
 
         # Time prediction input
-    ttk.Label(left_frame, text="Predict SG at time:").grid(row=10, column=0, padx=5, pady=(15, 2), sticky="w")
+    ttk.Label(left_frame, text="Predict SG at time:").grid(row=11, column=0, padx=5, pady=(15, 2), sticky="w")
     predict_time_entry = ttk.Entry(left_frame, width=10)
-    predict_time_entry.grid(row=10, column=1, padx=5, pady=(15, 2))
+    predict_time_entry.grid(row=11, column=1, padx=5, pady=(15, 2))
 
     sg_logistic_label = ttk.Label(left_frame, text="Logistic SG: —")
-    sg_logistic_label.grid(row=11, column=0, columnspan=2, sticky="w", padx=5)
+    sg_logistic_label.grid(row=12, column=0, columnspan=2, sticky="w", padx=5)
 
     sg_monod_label = ttk.Label(left_frame, text="Monod SG: —")
-    sg_monod_label.grid(row=12, column=0, columnspan=2, sticky="w", padx=5)
+    sg_monod_label.grid(row=13, column=0, columnspan=2, sticky="w", padx=5)
 
 
     btn_frame = ttk.Frame(root)
