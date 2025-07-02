@@ -667,17 +667,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# python -m PyInstaller --noconfirm --onefile --windowed ^
-# --icon="mead_calculation_icon.ico" ^
-# --hidden-import=scipy._lib._ccallback ^
-# --hidden-import=scipy._lib.messagestream ^
-# --hidden-import=scipy._lib._util ^
-# --hidden-import=scipy._lib._testutils ^
-# --hidden-import=scipy.special._ufuncs ^
-# --hidden-import=scipy.special._ufuncs_cxx ^
-# --hidden-import=scipy.special._specfun ^
-# --hidden-import=scipy.linalg._fblas ^
-# --hidden-import=scipy.linalg._cythonized_array_utils ^
-# --hidden-import=scipy._cyutility ^
-# "Homebrewing calculator.py"
-# <- to make an application on desktop
+# python -m PyInstaller --noconfirm --onefile --windowed --icon="mead_calculation_icon.ico" --collect-submodules=numpy --collect-submodules=scipy "Homebrewing calculator.py"
