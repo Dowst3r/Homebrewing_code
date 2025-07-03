@@ -508,8 +508,12 @@ def show_fermentation_tracking_screen(root):
             from scipy.optimize import minimize
 
             X0 = (float(mass_of_yeast.get()))/(float(volume_of_mead.get()))
-            S0 = (float(mass_of_sugar.get()))/(float(volume_of_mead.get()))
+            SG0 = float(sg_entries[0].get())
+            V_mead = float(volume_of_mead.get())
             YXS = 0.1         # yield coefficient
+            F_SP = 0.0128
+            rho_eth = 789.45
+            S0 = V_mead * (((1.05 / 0.79) * rho_eth * (SG0 - 1)) / (1 - YXS) + F_SP)
 
             measured_t = np.array(times)
             measured_sg = np.array(sgs)
@@ -529,8 +533,9 @@ def show_fermentation_tracking_screen(root):
                     return [dX, dS]
 
                 sol = solve_ivp(dXdt, [0, max(measured_t) + 5], [X0, S0], t_eval=measured_t, method="RK45", max_step=0.05)
-                SG_pred = 1 + (1 - YXS) * (sol.y[1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth))
-)
+                SG_pred = 1 + (1 - YXS) * (sol.y[1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)))
+                SG_pred = SG_pred * (SG0 / SG_pred[0])
+
 
                 return SG_pred
 
@@ -567,8 +572,8 @@ def show_fermentation_tracking_screen(root):
                     return [dX, dS]
 
                 sol = solve_ivp(dXdt, [0, max(times) + 5], [X0, S0], t_eval=t_fit, method="RK45", max_step=0.1)
-                SG_fit = 1 + (1 - YXS) * (sol.y[1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth))
-)
+                SG_fit = 1 + (1 - YXS) * (sol.y[1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)))
+                SG_fit = SG_fit * (SG0 / SG_fit[0])
 
 
                 ax2.clear()
@@ -577,6 +582,7 @@ def show_fermentation_tracking_screen(root):
                 ax2.set_title("Graph 2: Fitted Monod SG Model")
                 ax2.set_xlabel("Time (days)")
                 ax2.set_ylabel("SG")
+                ax2.set_ylim(0.98, 1.12)
                 ax2.legend()
                 ax2.grid(True)
             else:
@@ -616,9 +622,6 @@ def show_fermentation_tracking_screen(root):
     ttk.Label(left_frame, text="Mass of yeast added (g)").grid(row=8, column=0, pady=5)
     mass_of_yeast = ttk.Entry(left_frame, width=10)
     mass_of_yeast.grid(row=8, column=1, padx=5)
-    ttk.Label(left_frame, text="Mass of sugar added (g)").grid(row=9, column=0, pady=5)
-    mass_of_sugar = ttk.Entry(left_frame, width=10)
-    mass_of_sugar.grid(row=9, column=1, padx=5)
     ttk.Label(left_frame, text="Volume of mead being made (L)").grid(row=10, column=0)
     volume_of_mead = ttk.Entry(left_frame, width=10)
     volume_of_mead.grid(row=10, column=1, pady=10)
