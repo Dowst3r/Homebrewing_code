@@ -453,166 +453,144 @@ def show_fermentation_tracking_screen(root):
 
 
     def calculate_graphs():
-        times = []
-        sgs = []
-        for i in range(6):
-            try:
-                t = float(time_entries[i].get())
-                sg = float(sg_entries[i].get())
-                times.append(t)
-                sgs.append(sg)
-            except ValueError:
-                continue
-
-        if len(times) < 2:
-            tk.messagebox.showerror("Input Error", "Please enter at least 2 valid data points.")
-            return
-
-        # Sort input
-        paired = sorted(zip(times, sgs))
-        times, sgs = zip(*paired)
-
-        SG_min = 1.000
-        SG_max = max(sgs)
-
-        # --- Model A: Logistic Fit ---
-        def equations(x):
-            k, t0 = x
-            return [
-                SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (times[0] - t0))) - sgs[0],
-                SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (times[-1] - t0))) - sgs[-1]
-            ]
+        from scipy.optimize import differential_evolution
 
         try:
-            sol = fsolve(equations, [-2.0, times[-1] / 2])
-            k, t0 = sol
-            t_fit = np.linspace(0, max(times) + 5, 200)
-            sg_fit = SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (t_fit - t0)))
+            times = []
+            sgs = []
+            for i in range(6):
+                try:
+                    t = float(time_entries[i].get())
+                    sg = float(sg_entries[i].get())
+                    times.append(t)
+                    sgs.append(sg)
+                except ValueError:
+                    continue
 
-            ax1.clear()
-            ax1.plot(t_fit, sg_fit, 'b-', label='Logistic Fit')
-            ax1.scatter(times, sgs, color='red', label='Measured')
-            ax1.set_title("Graph 1: Logistic SG Fit")
-            ax1.set_xlabel("Time (days)")
-            ax1.set_ylabel("SG")
-            ax1.legend()
-            ax1.grid(True)
-        except Exception as e:
-            ax1.clear()
-            ax1.text(0.1, 0.5, f"Logistic model failed:\n{e}", color='red')
+            if len(times) < 2:
+                tk.messagebox.showerror("Input Error", "Please enter at least 2 valid data points.")
+                return
 
+            # Sort inputs
+            paired = sorted(zip(times, sgs))
+            times, sgs = zip(*paired)
 
-
-                # --- Model B: Monod-like ODE with Parameter Fitting ---
-        try:
-            from scipy.optimize import minimize
-
-            X0 = (float(mass_of_yeast.get()))/(float(volume_of_mead.get()))
-            SG0 = float(sg_entries[0].get())
+            SG_min = 1.000
+            SG_max = max(sgs)
+            SG0 = float(sgs[0])
             V_mead = float(volume_of_mead.get())
-            YXS = 0.1         # yield coefficient
+            X0 = float(mass_of_yeast.get()) / V_mead
+            YXS = 0.1  # <-- FIXED yield coefficient
+
+            # Constants
             F_SP = 0.0128
             rho_eth = 789.45
-            S0 = V_mead * (((1.05 / 0.79) * rho_eth * (SG0 - 1)) / (1 - YXS) + F_SP)
+            MW_CO2 = 44.01
+            MW_eth = 46.069
 
-            measured_t = np.array(times)
-            measured_sg = np.array(sgs)
+            # Initial sugar concentration (fixed)
+            S0 = V_mead * (((SG0 - 1) * ((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)) / (1 - YXS)) + F_SP)
 
-            def simulate_monod(mu_max, Ks, S0):
-                V_mead = float(volume_of_mead.get())
-                F_SP = 0.0128
-                rho_eth = 789.45
-                MW_CO2 = 44.01
-                MW_eth = 46.069
+
+            t_max = max(times + (float(predict_time_entry.get()),))
+            t_fit = np.linspace(0, t_max + 2, 600)
+
+            # --- Logistic Fit ---
+            def logistic_eqns(x):
+                k, t0 = x
+                return [
+                    SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (times[0] - t0))) - sgs[0],
+                    SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (times[-1] - t0))) - sgs[-1]
+                ]
+
+            try:
+                k, t0 = fsolve(logistic_eqns, [-2.0, times[-1] / 2])
+                sg_fit = SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (t_fit - t0)))
+
+                ax1.clear()
+                ax1.plot(t_fit, sg_fit, 'b-', label='Logistic Fit')
+                ax1.scatter(times, sgs, color='red', label='Measured')
+                ax1.set_title("Graph 1: Logistic SG Fit")
+                ax1.set_xlabel("Time (days)")
+                ax1.set_ylabel("SG")
+                ax1.set_ylim(0.98, SG0*1.05)
+                ax1.grid(True)
+                ax1.legend()
+            except Exception as e:
+                ax1.clear()
+                ax1.text(0.1, 0.5, f"Logistic fit failed:\n{e}", color='red')
+
+            # --- Monod Fit (only mu_max and Ks) ---
+            def simulate_monod(mu_max, Ks, t_eval):
                 def dXdt(t, y):
                     X, S = y
-                    S = max(S, 0)
-                    mu = mu_max * S / (Ks + S)
+                    S = max(S, 1e-6)
+                    mu = mu_max * S / (Ks + S + 1e-8)
                     dX = mu * X
-                    dS = -dX / YXS if S > 0 else 0
+                    dS = -dX / YXS if S > 1e-6 else 0
                     return [dX, dS]
 
-                sol = solve_ivp(dXdt, [0, max(measured_t) + 5], [X0, S0], t_eval=measured_t, method="RK45", max_step=0.05)
-                SG_pred = 1 + (1 - YXS) * (sol.y[1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)))
-                SG_pred = SG_pred * (SG0 / SG_pred[0])
-
-
-                return SG_pred
+                try:
+                    sol = solve_ivp(dXdt, [0, max(t_eval)], [X0, S0], t_eval=t_eval, max_step=0.1)
+                    S = np.maximum(sol.y[1], 0)
+                    SG = 1 + (1 - YXS) * (S / V_mead - F_SP) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)))
+                    SG = np.maximum(SG, SG_min)
+                    return SG, sol.t
+                except:
+                    return np.full_like(t_eval, np.nan), t_eval
 
             def objective(params):
                 mu_max, Ks = params
-                if mu_max <= 0 or Ks <= 0:
+                if not (0.001 < mu_max < 5 and 0.01 < Ks < 50):
                     return np.inf
-                try:
-                    SG_pred = simulate_monod(mu_max, Ks, S0)
-                    return np.sum((SG_pred - measured_sg) ** 2)
-                except:
+                SG_pred, _ = simulate_monod(mu_max, Ks, np.array(times))
+                if np.any(np.isnan(SG_pred)):
                     return np.inf
+                return np.sum((SG_pred - np.array(sgs)) ** 2)
 
-            # Initial guess and bounds
-            initial_guess = [0.4, 1.0]
-            bounds = [(0.001, 5.0), (0.01, 50.0)]
-
-            result = minimize(objective, initial_guess, bounds=bounds)
+            result = differential_evolution(objective, bounds=[(0.001, 5), (0.01, 50)],
+                                        strategy='best1bin', maxiter=500, polish=True)
 
             if result.success:
                 mu_opt, Ks_opt = result.x
-                t_fit = np.linspace(0, max(times) + 5, 200)
-                V_mead = float(volume_of_mead.get())
-                F_SP = 0.0128
-                rho_eth = 789.45
-                MW_CO2 = 44.01
-                MW_eth = 46.069
-
-                def dXdt(t, y):
-                    X, S = y
-                    mu = mu_opt * S / (Ks_opt + S)
-                    dX = mu * X
-                    dS = -dX / YXS
-                    return [dX, dS]
-
-                sol = solve_ivp(dXdt, [0, max(times) + 5], [X0, S0], t_eval=t_fit, method="RK45", max_step=0.1)
-                SG_fit = 1 + (1 - YXS) * (sol.y[1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)))
-                SG_fit = SG_fit * (SG0 / SG_fit[0])
-
+                SG_fit, t_vals = simulate_monod(mu_opt, Ks_opt, t_fit)
 
                 ax2.clear()
-                ax2.plot(sol.t, SG_fit, color='green', label='Monod SG Fit')
+                ax2.plot(t_vals, SG_fit, color='green', label='Monod Fit')
                 ax2.scatter(times, sgs, color='red', label='Measured')
                 ax2.set_title("Graph 2: Fitted Monod SG Model")
                 ax2.set_xlabel("Time (days)")
                 ax2.set_ylabel("SG")
-                ax2.set_ylim(0.98, 1.12)
-                ax2.legend()
+                ax2.set_ylim(0.98, SG0*1.05)
                 ax2.grid(True)
+                ax2.legend()
+
+                # Predict SG at a specified time
+                try:
+                    predict_time = float(predict_time_entry.get())
+                    SG_pred, _ = simulate_monod(mu_opt, Ks_opt, [predict_time])
+                    if np.isnan(SG_pred[-1]):
+                        raise ValueError
+                    sg_monod_label.config(text=f"Monod SG: {SG_pred[-1]:.4f}")
+                except:
+                    sg_monod_label.config(text="Monod SG: —")
             else:
-                raise RuntimeError("Fitting failed")
+                ax2.clear()
+                ax2.text(0.1, 0.5, "Monod fit failed", color='red')
+                sg_monod_label.config(text="Monod SG: —")
+
+            # Predict SG from Logistic model
+            try:
+                predict_time = float(predict_time_entry.get())
+                sg_log = SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (predict_time - t0)))
+                sg_logistic_label.config(text=f"Logistic SG: {sg_log:.4f}")
+            except:
+                sg_logistic_label.config(text="Logistic SG: —")
+
+            canvas.draw()
 
         except Exception as e:
-            ax2.clear()
-            ax2.text(0.1, 0.5, f"Monod fit failed:\n{e}", color='red')
-
-        canvas.draw()
-
-                # --- Predict SG at specific time if input provided ---
-        try:
-            predict_time = float(predict_time_entry.get())
-            if predict_time < 0:
-                raise ValueError("Time must be non-negative.")
-
-            # Logistic model prediction
-            sg_log = SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (predict_time - t0)))
-            sg_logistic_label.config(text=f"Logistic SG: {sg_log:.4f}")
-            
-            # Monod model prediction
-            sol_pred = solve_ivp(dXdt, [0, predict_time], [X0, S0], t_eval=[predict_time])
-            sg_monod = 1 + (1 - YXS) * (sol_pred.y[1][-1] / V_mead - (F_SP)) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)))
-
-            sg_monod_label.config(text=f"Monod SG: {sg_monod:.4f}")
-
-        except ValueError:
-            sg_logistic_label.config(text="Logistic SG: —")
-            sg_monod_label.config(text="Monod SG: —")
+            tk.messagebox.showerror("Error", str(e))
 
     # Bottom Buttons
     ttk.Button(left_frame, text="Calculate", command=calculate_graphs, bootstyle="success large").grid(row=7, column=0, columnspan=2, pady=10)
