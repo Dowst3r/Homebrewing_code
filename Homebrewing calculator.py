@@ -43,6 +43,7 @@ def show_home_screen(root):
     clear_screen(root)
     ttk.Label(root, text="Welcome to Mead Helper!", font=("Arial", 16)).pack(pady=20)
     ttk.Button(root, text="Mead Recipe", command=lambda: show_mead_recipe_screen(root)).pack(pady=20)
+    ttk.Button(root, text="ABV measurement", command=lambda: show_ABV_calculation_screen(root)).pack(pady=20)
     ttk.Button(root, text="pH Adjustment", command=lambda: show_ph_adjustment_screen(root)).pack(pady=20)
     ttk.Button(root, text="Fermentation tracking", command=lambda: show_fermentation_tracking_screen(root)).pack(pady=20)
 
@@ -329,6 +330,66 @@ Honey Mass Required: {mass_honey_needed_for_sweetening:.2f} g
 
     except Exception as e:
         tk.messagebox.showerror("Error", f"Calculation failed:\n{e}")
+
+
+
+
+
+
+
+
+def show_ABV_calculation_screen(root):
+    clear_screen(root)
+
+    ttk.Label(root, text="ABV calculation", font=("Arial", 16)).pack(pady=10)
+
+    container = ttk.Frame(root)
+    container.pack(pady=10, padx=20, anchor="center")
+
+    starting_gravity = tk.StringVar()
+    final_gravity = tk.StringVar()
+
+    form = ttk.Frame(container)
+    form.grid(row=0, column=0, sticky="n", padx=(0, 20))
+
+    ttk.Label(form, text="Starting Gravity:").pack(anchor='w', pady=(0, 2))
+    ttk.Entry(form, textvariable=starting_gravity, width=30).pack(fill='x', pady=(0, 10))
+
+    ttk.Label(form, text="Final Gravity:").pack(anchor='w', pady=(0, 2))
+    ttk.Entry(form, textvariable=final_gravity, width=30).pack(fill='x', pady=(0, 10))
+
+    btn_frame = ttk.Frame(root)
+    btn_frame.pack(pady=10)
+
+    def calculate_ABV():
+        try:
+            starting_gravity_calc = float(starting_gravity.get())
+            final_gravity_calc = float(final_gravity.get())
+
+            ABV = (1.05/0.79) * ((starting_gravity_calc - final_gravity_calc)/(final_gravity_calc)) * 100
+
+            result = f"""
+Starting Gravity: {starting_gravity_calc}
+Final Gravity: {final_gravity_calc}
+
+%ABV calculated: {ABV:.1f} %
+"""
+
+            output = tk.Toplevel(root)
+            output.title("ABV Calculation Result")
+            output.geometry("1400x1300")
+            ttk.Label(output, text="ABV Calculation", font=("Arial", 14)).pack(pady=10)
+            text = tk.Text(output, wrap="word")
+            text.insert("1.0", result.strip())
+            text.config(state="disabled")
+            text.pack(fill="both", expand=True, padx=10)
+            ttk.Button(output, text="Close", command=output.destroy).pack(pady=10)
+
+        except Exception as e:
+            tk.messagebox.showerror("Error", f"Invalid input:\n{e}")
+
+    ttk.Button(btn_frame, text="Calculate", width=20, command=calculate_ABV, bootstyle="success large").pack(pady=5)
+    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root), bootstyle="success large").pack()
 
 def show_ph_adjustment_screen(root):
     clear_screen(root)
