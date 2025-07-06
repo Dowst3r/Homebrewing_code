@@ -1,14 +1,24 @@
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
 import tkinter as tk
 import tkinter.messagebox
+from tkinter import filedialog, messagebox
+
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
+
 import json
 import os
+
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
+
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+
 
 
 HONEY_DATA_FILE = "honey_data.json"
@@ -312,7 +322,11 @@ Volume of water to add: {volume_l - volume_honey:.2f} L
         if m_fermaid_o is not None:
             result_text += f"""
 --- Fermaid-O Nutrient Addition ---
-Fermaid-O Required: {m_fermaid_o:.2f} g divided into 4 doses from day 0 to 3
+Fermaid-O Required: {m_fermaid_o/4:.2f} g on day 0
+Fermaid-O Required: {m_fermaid_o/4:.2f} g on day 1
+Fermaid-O Required: {m_fermaid_o/4:.2f} g on day 2
+Fermaid-O Required: {m_fermaid_o/4:.2f} g on day 3
+This is all the nutrient that is required!
 """
 
         result_text += f"""
@@ -326,6 +340,38 @@ Honey Mass Required: {mass_honey_needed_for_sweetening:.2f} g
         text_widget.insert("1.0", result_text.strip())
         text_widget.config(state="disabled")
         text_widget.pack(fill="both", expand=True, padx=10)
+
+        def save_as_pdf():
+            file_path = filedialog.asksaveasfilename(
+                defaultextension = ".pdf",
+                filetypes = [("PDF files", "*.pdf")],
+                title = "Save as PDF"
+            )
+            if file_path:
+                try:
+                    from reportlab.pdfgen import canvas
+                    from reportlab.lib.pagesizes import A4
+                    from reportlab.lib.units import mm
+
+                    c = canvas.Canvas(file_path, pagesize=A4)
+                    width, height = A4
+                    lines = result_text.strip().split('\n')
+                    y = height - 20 * mm
+
+                    for line in lines:
+                        c.drawString(20 * mm, y, line)
+                        y -= 10 * mm
+                        if y < 20 * mm:
+                            c.showPage()
+                            y = height - 20 * mm
+                    
+                    c.save()
+                    messagebox.showinfo("Success", f"PDF saved successfully:\n{file_path}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to save PDF:\n{e}")
+
+        
+        ttk.Button(output, text="Save as PDF", command=save_as_pdf).pack(pady=10)
         ttk.Button(output, text="Close", command=output.destroy).pack(pady=10)
 
     except Exception as e:
