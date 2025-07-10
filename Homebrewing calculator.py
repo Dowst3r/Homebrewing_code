@@ -56,6 +56,7 @@ def show_home_screen(root):
     ttk.Button(root, text="ABV measurement", command=lambda: show_ABV_calculation_screen(root)).pack(pady=20)
     ttk.Button(root, text="pH Adjustment", command=lambda: show_ph_adjustment_screen(root)).pack(pady=20)
     ttk.Button(root, text="Fermentation tracking", command=lambda: show_fermentation_tracking_screen(root)).pack(pady=20)
+    root.iconbitmap("mead_calculation_icon.ico")
 
 def show_mead_recipe_screen(root):
     clear_screen(root)
@@ -374,9 +375,9 @@ Honey Mass Required: {mass_honey_needed_for_sweetening:.2f} g
         ttk.Button(output, text="Save as PDF", command=save_as_pdf).pack(pady=10)
         ttk.Button(output, text="Close", command=output.destroy).pack(pady=10)
 
+    
     except Exception as e:
         tk.messagebox.showerror("Error", f"Calculation failed:\n{e}")
-
 
 
 
