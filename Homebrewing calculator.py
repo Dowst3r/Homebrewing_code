@@ -54,6 +54,7 @@ def show_home_screen(root):
     ttk.Label(root, text="Welcome to Mead Helper!", font=("Arial", 16)).pack(pady=20)
     ttk.Button(root, text="Mead Recipe", command=lambda: show_mead_recipe_screen(root)).pack(pady=20)
     ttk.Button(root, text="ABV measurement", command=lambda: show_ABV_calculation_screen(root)).pack(pady=20)
+    ttk.Button(root, text="Backsweetening", command=lambda: show_backsweetening_calculation_screen(root)).pack(pady=20)
     ttk.Button(root, text="pH Adjustment", command=lambda: show_ph_adjustment_screen(root)).pack(pady=20)
     ttk.Button(root, text="Fermentation tracking", command=lambda: show_fermentation_tracking_screen(root)).pack(pady=20)
     root.iconbitmap("mead_calculation_icon.ico")
@@ -728,6 +729,72 @@ def show_fermentation_tracking_screen(root):
     btn_frame.pack(pady=10)
     ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root), bootstyle="success large").pack()
 
+
+
+
+def show_backsweetening_calculation_screen(root):
+    clear_screen(root)
+
+    ttk.Label(root, text="Back-sweetening Calculation", font=("Arial", 16)).pack(pady=10)
+
+    # Use center container
+    container = ttk.Frame(root)
+    container.pack(pady=10, padx=20, anchor="center")
+
+    final_gravity = tk.StringVar()
+    desired_gravity = tk.StringVar()
+    volume_l = tk.StringVar()
+
+    # Form column
+    form = ttk.Frame(container)
+    form.grid(row=0, column=0, sticky="n", padx=(0, 20))
+
+    ttk.Label(form, text="Final Gravity reading:").pack(anchor='w', pady=(0, 2))
+    ttk.Entry(form, textvariable=final_gravity, width=30).pack(fill='x', pady=(0, 10))
+
+    ttk.Label(form, text="Target Gravity:").pack(anchor='w', pady=(0, 2))
+    ttk.Entry(form, textvariable=desired_gravity, width=30).pack(fill='x', pady=(0, 10))
+
+    ttk.Label(form, text="Volume of mead (L):").pack(anchor='w', pady=(0, 2))
+    ttk.Entry(form, textvariable=volume_l, width=30).pack(fill='x', pady=(0, 10))
+
+    # Bottom buttons
+    btn_frame = ttk.Frame(root)
+    btn_frame.pack(pady=10)
+
+    def calculate_backsweetening():
+        try:
+            final_gravity_reading = float(final_gravity.get())
+            target_gravity = float(desired_gravity.get())
+            V = float(volume_l.get())
+
+            mass_sugar_needed = 
+            mass_honey_needed = 
+
+            result = f"""
+Final Gravity: {final_gravity_reading}
+Fina Gravity desired: {target_gravity}
+Volume: {V} L
+
+Mass of sugar needed: {mass_sugar_needed:.2e} g
+Mass of honey needed: {mass_honey_needed:.2e} g
+"""
+
+            output = tk.Toplevel(root)
+            output.title("Back-sweetening Result")
+            output.geometry("1400x1300")
+            ttk.Label(output, text="Sugar/Honey requirement", font=("Arial", 14)).pack(pady=10)
+            text = tk.Text(output, wrap="word")
+            text.insert("1.0", result.strip())
+            text.config(state="disabled")
+            text.pack(fill="both", expand=True, padx=10)
+            ttk.Button(output, text="Close", command=output.destroy).pack(pady=10)
+
+        except Exception as e:
+            tk.messagebox.showerror("Error", f"Invalid input:\n{e}")
+
+    ttk.Button(btn_frame, text="Calculate", width=20, command=calculate_backsweetening, bootstyle="success large").pack(pady=5)
+    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root), bootstyle="success large").pack()
 
 def main():
     root = tk.Tk()
