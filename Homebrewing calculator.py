@@ -108,6 +108,8 @@ def show_mead_recipe_screen(root):
     fruit_entry = ttk.Entry(entry_group, textvariable=root.fruit_type_var, state="disabled")
     fruit_entry.pack(fill='x', pady=(0, 10))
 
+
+
     # --- Honey Databank with Headers ---
     honey_group = ttk.LabelFrame(main_frame, text="Honey Data", padding=10)
     honey_group.grid(row=0, column=1, sticky='n', padx=10)
@@ -420,12 +422,12 @@ def show_ABV_calculation_screen(root):
 Starting Gravity: {starting_gravity_calc}
 Final Gravity: {final_gravity_calc}
 
-%ABV calculated: {ABV:.1f} %
+%ABV calculated: {ABV:.3f} %
 """
 
             output = tk.Toplevel(root)
             output.title("ABV Calculation Result")
-            output.geometry("1400x1300")
+            output.geometry("700x600")
             ttk.Label(output, text="ABV Calculation", font=("Arial", 14)).pack(pady=10)
             text = tk.Text(output, wrap="word")
             text.insert("1.0", result.strip())
@@ -505,7 +507,7 @@ Mass CaCO₃ required: {mass_CaCO3:.4f} g
 
             output = tk.Toplevel(root)
             output.title("pH Adjustment Result")
-            output.geometry("1400x1300")
+            output.geometry("400x300")
             ttk.Label(output, text="CaCO₃ Requirement", font=("Arial", 14)).pack(pady=10)
             text = tk.Text(output, wrap="word")
             text.insert("1.0", result.strip())
@@ -737,52 +739,115 @@ def show_backsweetening_calculation_screen(root):
 
     ttk.Label(root, text="Back-sweetening Calculation", font=("Arial", 16)).pack(pady=10)
 
-    # Use center container
+    # Container for the whole layout
     container = ttk.Frame(root)
-    container.pack(pady=10, padx=20, anchor="center")
+    container.pack(padx=20, pady=10, fill='both', expand=True)
 
+    # Variables
     final_gravity = tk.StringVar()
     desired_gravity = tk.StringVar()
     volume_l = tk.StringVar()
+    selected_honey = tk.StringVar()
 
-    # Form column
+    # Create form + honey section in horizontal grid
     form = ttk.Frame(container)
-    form.grid(row=0, column=0, sticky="n", padx=(0, 20))
+    form.grid(row=0, column=0, sticky="n")
 
-    ttk.Label(form, text="Final Gravity reading:").pack(anchor='w', pady=(0, 2))
-    ttk.Entry(form, textvariable=final_gravity, width=30).pack(fill='x', pady=(0, 10))
+    # --- Form section on the left ---
+    ttk.Label(form, text="Final Gravity reading:").grid(row=0, column=0, sticky="w", pady=(0, 2))
+    ttk.Entry(form, textvariable=final_gravity, width=30).grid(row=1, column=0, pady=(0, 10), sticky="ew")
 
-    ttk.Label(form, text="Target Gravity:").pack(anchor='w', pady=(0, 2))
-    ttk.Entry(form, textvariable=desired_gravity, width=30).pack(fill='x', pady=(0, 10))
+    ttk.Label(form, text="Target Gravity:").grid(row=2, column=0, sticky="w", pady=(0, 2))
+    ttk.Entry(form, textvariable=desired_gravity, width=30).grid(row=3, column=0, pady=(0, 10), sticky="ew")
 
-    ttk.Label(form, text="Volume of mead (L):").pack(anchor='w', pady=(0, 2))
-    ttk.Entry(form, textvariable=volume_l, width=30).pack(fill='x', pady=(0, 10))
+    ttk.Label(form, text="Volume of mead (L):").grid(row=4, column=0, sticky="w", pady=(0, 2))
+    ttk.Entry(form, textvariable=volume_l, width=30).grid(row=5, column=0, pady=(0, 10), sticky="ew")
 
-    # Bottom buttons
+    ttk.Label(form, text="Select Honey:").grid(row=6, column=0, sticky="w", pady=(10, 2))
+    honey_combo = ttk.Combobox(form, textvariable=selected_honey, state="readonly", width=28)
+    honey_combo['values'] = [h["Name"] for h in honey_data]
+    honey_combo.grid(row=7, column=0, pady=(0, 10), sticky="ew")
+
+    # --- Honey databank on the right ---
+    honey_group = ttk.LabelFrame(container, text="Honey Data", padding=10)
+    honey_group.grid(row=0, column=1, padx=(20, 0), sticky='n')
+
+    honey_canvas = tk.Canvas(honey_group, height=200)
+    honey_scrollbar = ttk.Scrollbar(honey_group, orient="vertical", command=honey_canvas.yview)
+    honey_frame = ttk.Frame(honey_canvas)
+
+    honey_canvas.create_window((0, 0), window=honey_frame, anchor="nw")
+    honey_canvas.configure(yscrollcommand=honey_scrollbar.set)
+    honey_canvas.pack(side="left", fill="both", expand=True)
+    honey_scrollbar.pack(side="right", fill="y")
+
+    def refresh_honey():
+        for widget in honey_frame.winfo_children():
+            widget.destroy()
+        headers = ["Name", "Sugar", "Density", "Cost", "Delete"]
+        for c, h in enumerate(headers):
+            ttk.Label(honey_frame, text=h, font=("Arial", 10, "bold")).grid(row=0, column=c, padx=5)
+        for i, h in enumerate(honey_data):
+            ttk.Label(honey_frame, text=h["Name"]).grid(row=i+1, column=0)
+            ttk.Label(honey_frame, text=h["Sugar"]).grid(row=i+1, column=1)
+            ttk.Label(honey_frame, text=h["Density"]).grid(row=i+1, column=2)
+            ttk.Label(honey_frame, text=h.get("Cost", "N/A")).grid(row=i+1, column=3)
+            ttk.Button(honey_frame, text="Delete", command=lambda i=i: delete_honey(i)).grid(row=i+1, column=4)
+
+    def delete_honey(i):
+        del honey_data[i]
+        save_data(HONEY_DATA_FILE, honey_data)
+        refresh_honey()
+
+    refresh_honey()
+
+    # --- Bottom Buttons ---
     btn_frame = ttk.Frame(root)
-    btn_frame.pack(pady=10)
+    btn_frame.pack(pady=15)
 
     def calculate_backsweetening():
         try:
             final_gravity_reading = float(final_gravity.get())
             target_gravity = float(desired_gravity.get())
             V = float(volume_l.get())
+            Y_xs = 0.1
+            rho_eth = 789.45
+            MW_CO2 = 44.01
+            MW_eth = 46.069
+            F_sp = 0.0128
+            fraction_fermentable = 0.925
 
-            mass_sugar_needed = 
-            mass_honey_needed = 
+            imaginary_ABV_for_desired_final_sweetness = (1.05 / 0.79) * ((target_gravity - final_gravity_reading) / final_gravity_reading) * 100
+            mass_ethanol_sweetening = ((V / 1000) * rho_eth * imaginary_ABV_for_desired_final_sweetness) / 100
+            mass_sugar_needed = ((1 / (1 - Y_xs)) * (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) + F_sp * V) * 1000)
+
+            selected = selected_honey.get()
+            honey = next((h for h in honey_data if h["Name"] == selected), None)
+            if honey:
+                try:
+                    sugar_conc = float(honey["Sugar"].replace('%', '').strip())
+                except ValueError:
+                    sugar_conc = 0
+            else:
+                sugar_conc = 0
+
+            if sugar_conc:
+                mass_honey_needed = (mass_sugar_needed / (sugar_conc / 100)) / fraction_fermentable
+            else:
+                mass_honey_needed = 0
 
             result = f"""
 Final Gravity: {final_gravity_reading}
-Fina Gravity desired: {target_gravity}
+Target Gravity: {target_gravity}
 Volume: {V} L
 
-Mass of sugar needed: {mass_sugar_needed:.2e} g
-Mass of honey needed: {mass_honey_needed:.2e} g
+Mass of sugar needed: {mass_sugar_needed:.2f} g
+Mass of honey needed: {mass_honey_needed:.2f} g
 """
 
             output = tk.Toplevel(root)
             output.title("Back-sweetening Result")
-            output.geometry("1400x1300")
+            output.geometry("700x600")
             ttk.Label(output, text="Sugar/Honey requirement", font=("Arial", 14)).pack(pady=10)
             text = tk.Text(output, wrap="word")
             text.insert("1.0", result.strip())
@@ -793,8 +858,8 @@ Mass of honey needed: {mass_honey_needed:.2e} g
         except Exception as e:
             tk.messagebox.showerror("Error", f"Invalid input:\n{e}")
 
-    ttk.Button(btn_frame, text="Calculate", width=20, command=calculate_backsweetening, bootstyle="success large").pack(pady=5)
-    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root), bootstyle="success large").pack()
+    ttk.Button(btn_frame, text="Calculate", width=20, command=calculate_backsweetening).pack(pady=5)
+    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root)).pack()
 
 def main():
     root = tk.Tk()
