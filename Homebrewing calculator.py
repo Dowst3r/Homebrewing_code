@@ -19,24 +19,11 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 
-def _to_points(x: float | int) -> int:
-    """Normalize SG/points to gravity points."""
-    x = float(x)
-    if x < 2.0:        # 1.040 -> 40
-        return int(round((x - 1.0) * 1000))
-    if x >= 1000.0:    # 1040 -> 40
-        return int(round(x - 1000.0))
-    return int(round(x))  # already points
-
-# --- ABV helpers using closed-form equation ---
-# ABV(%) = (OG - FG) / (A0 - A1 * OG)
-# with OG, FG as hydrometer SG in 1.xxx form.
-
-A0 = 0.1029394336      # adjust if your constant is slightly different
-A1 = 0.00263418558     # coefficient multiplying OG
+A0 = 0.0102939642333984375
+A1 = 0.0026341854919339838
 
 
-def abv_simple(og_sg: float, fg_sg: float) -> float:
+def abv_hmrc(og_sg: float, fg_sg: float) -> float:
     """
     ABV (%) from original and final gravity using the closed-form equation:
 
@@ -48,15 +35,6 @@ def abv_simple(og_sg: float, fg_sg: float) -> float:
     fg = float(fg_sg)
     denom = A0 - A1 * og
     return (og - fg) / denom
-
-
-def abv_hmrc(og: float | int, fg: float | int, *, max_iter: int = 6) -> float:
-    """
-    Backwards-compatible wrapper: keep the old function name but
-    delegate to abv_simple(). 'max_iter' is ignored now.
-    """
-    return abv_simple(float(og), float(fg))
-
 
 def og_for_target_abv(fg_sg: float, abv_target: float, *, max_iter: int = 12) -> float:
     """
@@ -73,8 +51,10 @@ def og_for_target_abv(fg_sg: float, abv_target: float, *, max_iter: int = 12) ->
     abv = float(abv_target)
     return (abv * A0 + fg) / (1.0 + abv * A1)
 
+
 HONEY_DATA_FILE = "honey_data.json"
 YEAST_DATA_FILE = "yeast_data.json"
+
 
 def load_data(file_path, default_data):
     if os.path.exists(file_path):
@@ -83,9 +63,11 @@ def load_data(file_path, default_data):
     else:
         return default_data
 
+
 def save_data(file_path, data):
     with open(file_path, "w") as f:
         json.dump(data, f, indent=4)
+
 
 honey_data = load_data(HONEY_DATA_FILE, [
     {"Name": "Runny Honey Lidl", "Sugar": "79.7%", "Density": "1376.4 kg/m³", "Cost": "0.3"},
@@ -97,9 +79,11 @@ yeast_data = load_data(YEAST_DATA_FILE, [
     {"Name": "EC-1118", "N Requirement": "Low"},
 ])
 
+
 def clear_screen(root):
     for widget in root.winfo_children():
         widget.destroy()
+
 
 def show_home_screen(root):
     clear_screen(root)
@@ -110,6 +94,18 @@ def show_home_screen(root):
     ttk.Button(root, text="pH Adjustment", command=lambda: show_ph_adjustment_screen(root)).pack(pady=20)
     ttk.Button(root, text="Fermentation tracking", command=lambda: show_fermentation_tracking_screen(root)).pack(pady=20)
     root.iconbitmap("mead_calculation_icon.ico")
+
+
+
+
+
+
+
+
+
+
+
+
 
 def show_mead_recipe_screen(root):
     clear_screen(root)
@@ -156,11 +152,10 @@ def show_mead_recipe_screen(root):
     def toggle_fruit_entry():
         fruit_entry.config(state="normal" if root.use_fruit_var.get() else "disabled")
 
-    ttk.Checkbutton(entry_group, text="Use Fruit?", variable=root.use_fruit_var, command=toggle_fruit_entry).pack(anchor='w', pady=(15, 0))
+    ttk.Checkbutton(entry_group, text="Use Fruit?", variable=root.use_fruit_var, command=toggle_fruit_entry)\
+        .pack(anchor='w', pady=(15, 0))
     fruit_entry = ttk.Entry(entry_group, textvariable=root.fruit_type_var, state="disabled")
     fruit_entry.pack(fill='x', pady=(0, 10))
-
-
 
     # --- Honey Databank with Headers ---
     honey_group = ttk.LabelFrame(main_frame, text="Honey Data", padding=10)
@@ -194,6 +189,7 @@ def show_mead_recipe_screen(root):
         refresh_honey()
 
     refresh_honey()
+
     # --- Add Honey Form ---
     honey_form = ttk.LabelFrame(main_frame, text="Add New Honey", padding=10)
     honey_form.grid(row=1, column=1, sticky='n', padx=10)
@@ -215,10 +211,8 @@ def show_mead_recipe_screen(root):
     ttk.Label(honey_form, text="Cost (£/100g):").pack(anchor='w')
     ttk.Entry(honey_form, textvariable=hcost).pack(fill='x', pady=2)
 
-    ttk.Button(honey_form, text="Add to Databank", command=lambda: add_honey(hname, hsugar, hdensity, hcost)).pack(pady=4)
-
-
-
+    ttk.Button(honey_form, text="Add to Databank",
+               command=lambda: add_honey(hname, hsugar, hdensity, hcost)).pack(pady=4)
 
     def add_honey(name, sugar, density, cost):
         try:
@@ -280,8 +274,10 @@ def show_mead_recipe_screen(root):
     ttk.Label(yeast_form, text="Yeast name:").pack(anchor='w')
     ttk.Entry(yeast_form, textvariable=yname).pack(fill='x', pady=2)
     ttk.Label(yeast_form, text="N requirement:").pack(anchor='w')
-    ttk.Combobox(yeast_form, textvariable=ynreq, values=["Low", "Medium", "High"], state="readonly").pack(fill='x', pady=2)
-    ttk.Button(yeast_form, text="Add to Databank", command=lambda: add_yeast(yname, ynreq)).pack(pady=4)
+    ttk.Combobox(yeast_form, textvariable=ynreq, values=["Low", "Medium", "High"],
+                 state="readonly").pack(fill='x', pady=2)
+    ttk.Button(yeast_form, text="Add to Databank",
+               command=lambda: add_yeast(yname, ynreq)).pack(pady=4)
 
     def add_yeast(name, nreq):
         if name.get().strip():
@@ -290,6 +286,20 @@ def show_mead_recipe_screen(root):
             refresh_yeast()
             name.set("")
             nreq.set("")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def show_output_window(root):
     try:
         volume_l = float(root.batch_size_var.get())
@@ -320,9 +330,10 @@ def show_output_window(root):
         starting_gravity = og_for_target_abv(final_gravity_desired, ABV_desired)
         mass_ethanol = ((volume_l / 1000) * rho_eth * ABV_desired) / 100
         total_sugar_needed = ((1 / (1 - Y_xs)) * (mass_ethanol * (1 + (MW_CO2 / MW_eth)) +
-                     F_sp * volume_l) * 1000)
+                          F_sp * volume_l) * 1000)
         test_mass_honey = (((1 / (1 - Y_xs)) * (mass_ethanol * (1 + (MW_CO2 / MW_eth)) +
-                              F_sp * volume_l) * 1000) / (sugar_conc / 100)) / fraction_fermentable if sugar_conc else 0
+                              F_sp * volume_l) * 1000) /
+                           (sugar_conc / 100)) / fraction_fermentable if sugar_conc else 0
 
         total_honey_kg = test_mass_honey / 1000 if sugar_conc else 0
         volume_honey = total_honey_kg / (density / 1000) if density else 0
@@ -330,8 +341,8 @@ def show_output_window(root):
 
         # Brix estimate
         brix = (
-            182.46007 * starting_gravity**3
-            - 775.68212 * starting_gravity**2
+            182.46007 * starting_gravity ** 3
+            - 775.68212 * starting_gravity ** 2
             + 1262.7794 * starting_gravity
             - 669.56218
         )
@@ -347,11 +358,17 @@ def show_output_window(root):
 
         # Back-sweetening calculation
         imaginary_ABV_for_desired_final_sweetness = abv_hmrc(final_gravity_desired, 1.000)
-        mass_ethanol_sweetening = ((volume_l / 1000) * rho_eth * imaginary_ABV_for_desired_final_sweetness) / 100
-        mass_pure_sugar_needed_for_sweetening = ((1 / (1 - Y_xs)) * (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) +
-                     F_sp * volume_l) * 1000)
-        mass_honey_needed_for_sweetening = (((1 / (1 - Y_xs)) * (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) +
-                              F_sp * volume_l) * 1000) / (sugar_conc / 100)) / fraction_fermentable if sugar_conc else 0
+        mass_ethanol_sweetening = ((volume_l / 1000) * rho_eth *
+                                   imaginary_ABV_for_desired_final_sweetness) / 100
+        mass_pure_sugar_needed_for_sweetening = (
+            (1 / (1 - Y_xs)) *
+            (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) + F_sp * volume_l) * 1000
+        )
+        mass_honey_needed_for_sweetening = (
+            ((1 / (1 - Y_xs)) *
+             (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) + F_sp * volume_l) * 1000) /
+            (sugar_conc / 100)
+        ) / fraction_fermentable if sugar_conc else 0
 
         # Output
         output = tk.Toplevel(root)
@@ -399,9 +416,9 @@ Honey Mass Required: {mass_honey_needed_for_sweetening:.2f} g
 
         def save_as_pdf():
             file_path = filedialog.asksaveasfilename(
-                defaultextension = ".pdf",
-                filetypes = [("PDF files", "*.pdf")],
-                title = "Save as PDF"
+                defaultextension=".pdf",
+                filetypes=[("PDF files", "*.pdf")],
+                title="Save as PDF"
             )
             if file_path:
                 try:
@@ -420,19 +437,24 @@ Honey Mass Required: {mass_honey_needed_for_sweetening:.2f} g
                         if y < 20 * mm:
                             c.showPage()
                             y = height - 20 * mm
-                    
+
                     c.save()
                     messagebox.showinfo("Success", f"PDF saved successfully:\n{file_path}")
                 except Exception as e:
                     messagebox.showerror("Error", f"Failed to save PDF:\n{e}")
 
-        
         ttk.Button(output, text="Save as PDF", command=save_as_pdf).pack(pady=10)
         ttk.Button(output, text="Close", command=output.destroy).pack(pady=10)
 
-    
     except Exception as e:
         tk.messagebox.showerror("Error", f"Calculation failed:\n{e}")
+
+
+
+
+
+
+
 
 
 
@@ -469,14 +491,12 @@ def show_ABV_calculation_screen(root):
             final_gravity_calc = float(final_gravity.get())
 
             abv = abv_hmrc(starting_gravity_calc, final_gravity_calc)
-            f_used = hmrc_factor_from_abv(abv)
 
             result = f"""
 Starting Gravity: {starting_gravity_calc}
 Final Gravity: {final_gravity_calc}
 
 %ABV calculated: {abv:.3f} %
-Factor used (f): {f_used:.3f}
 """
 
             output = tk.Toplevel(root)
@@ -492,8 +512,21 @@ Factor used (f): {f_used:.3f}
         except Exception as e:
             tk.messagebox.showerror("Error", f"Invalid input:\n{e}")
 
-    ttk.Button(btn_frame, text="Calculate", width=20, command=calculate_ABV, bootstyle="success large").pack(pady=5)
-    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root), bootstyle="success large").pack()
+    ttk.Button(btn_frame, text="Calculate", width=20,
+               command=calculate_ABV, bootstyle="success large").pack(pady=5)
+    ttk.Button(btn_frame, text="Back", width=20,
+               command=lambda: show_home_screen(root), bootstyle="success large").pack()
+
+
+
+
+
+
+
+
+
+
+
 
 def show_ph_adjustment_screen(root):
     clear_screen(root)
@@ -528,7 +561,11 @@ def show_ph_adjustment_screen(root):
     notes_box = tk.Text(notes_frame, width=40, height=10, wrap="word")
     notes_box.pack(fill='both', expand=True)
 
-    notes_box.insert("1.0", "This calculation is based on calcium carbonate, any other pH adjusting compound will use a different calculation.\n")
+    notes_box.insert(
+        "1.0",
+        "This calculation is based on calcium carbonate, "
+        "any other pH adjusting compound will use a different calculation.\n"
+    )
 
     # Bottom buttons
     btn_frame = ttk.Frame(root)
@@ -572,12 +609,26 @@ Mass CaCO₃ required: {mass_CaCO3:.4f} g
         except Exception as e:
             tk.messagebox.showerror("Error", f"Invalid input:\n{e}")
 
-    ttk.Button(btn_frame, text="Calculate", width=20, command=calculate_ph_adjustment, bootstyle="success large").pack(pady=5)
-    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root), bootstyle="success large").pack()
+    ttk.Button(btn_frame, text="Calculate", width=20,
+               command=calculate_ph_adjustment, bootstyle="success large").pack(pady=5)
+    ttk.Button(btn_frame, text="Back", width=20,
+               command=lambda: show_home_screen(root), bootstyle="success large").pack()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def show_fermentation_tracking_screen(root):
-
     clear_screen(root)
 
     ttk.Label(root, text="Fermentation Tracking", font=("Arial", 16)).pack(pady=10)
@@ -598,8 +649,8 @@ def show_fermentation_tracking_screen(root):
     for i in range(6):
         time_entry = ttk.Entry(left_frame, width=10)
         sg_entry = ttk.Entry(left_frame, width=10)
-        time_entry.grid(row=i+1, column=0, padx=5, pady=2)
-        sg_entry.grid(row=i+1, column=1, padx=5, pady=2)
+        time_entry.grid(row=i + 1, column=0, padx=5, pady=2)
+        sg_entry.grid(row=i + 1, column=1, padx=5, pady=2)
         time_entries.append(time_entry)
         sg_entries.append(sg_entry)
 
@@ -613,9 +664,8 @@ def show_fermentation_tracking_screen(root):
 
     fig.tight_layout(pad=2.0)
 
-    canvas = FigureCanvasTkAgg(fig, master=right_frame)
-    canvas.get_tk_widget().pack(fill="both", expand=True)
-
+    plot_canvas = FigureCanvasTkAgg(fig, master=right_frame)
+    plot_canvas.get_tk_widget().pack(fill="both", expand=True)
 
     def calculate_graphs():
         from scipy.optimize import differential_evolution
@@ -645,7 +695,7 @@ def show_fermentation_tracking_screen(root):
             SG0 = float(sgs[0])
             V_mead = float(volume_of_mead.get())
             X0 = float(mass_of_yeast.get()) / V_mead
-            YXS = 0.1  # <-- FIXED yield coefficient
+            YXS = 0.1  # fixed yield coefficient
 
             # Constants
             F_SP = 0.0128
@@ -654,8 +704,10 @@ def show_fermentation_tracking_screen(root):
             MW_eth = 46.069
 
             # Initial sugar concentration (fixed)
-            S0 = V_mead * (((SG0 - 1) * ((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)) / (1 - YXS)) + F_SP)
-
+            S0 = V_mead * (
+                ((SG0 - 1) * ((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)) / (1 - YXS))
+                + F_SP
+            )
 
             t_max = max(times + (float(predict_time_entry.get()),))
             t_fit = np.linspace(0, t_max + 2, 600)
@@ -665,8 +717,10 @@ def show_fermentation_tracking_screen(root):
                 k, t0 = x
                 return [
                     SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (times[0] - t0))) - sgs[0],
-                    SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (times[-1] - t0))) - sgs[-1]
+                    SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (times[-1] - t0))) - sgs[-1],
                 ]
+
+            logistic_ok = False
 
             try:
                 k, t0 = fsolve(logistic_eqns, [-2.0, times[-1] / 2])
@@ -678,9 +732,11 @@ def show_fermentation_tracking_screen(root):
                 ax1.set_title("Graph 1: Logistic SG Fit")
                 ax1.set_xlabel("Time (days)")
                 ax1.set_ylabel("SG")
-                ax1.set_ylim(0.98, SG0*1.05)
+                ax1.set_ylim(0.98, SG0 * 1.05)
                 ax1.grid(True)
                 ax1.legend()
+
+                logistic_ok = True
             except Exception as e:
                 ax1.clear()
                 ax1.text(0.1, 0.5, f"Logistic fit failed:\n{e}", color='red')
@@ -696,12 +752,17 @@ def show_fermentation_tracking_screen(root):
                     return [dX, dS]
 
                 try:
-                    sol = solve_ivp(dXdt, [0, max(t_eval)], [X0, S0], t_eval=t_eval, max_step=0.1)
+                    sol = solve_ivp(
+                        dXdt, [0, max(t_eval)], [X0, S0],
+                        t_eval=t_eval, max_step=0.1
+                    )
                     S = np.maximum(sol.y[1], 0)
-                    SG = 1 + (1 - YXS) * (S / V_mead - F_SP) / (((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth)))
+                    SG = 1 + (1 - YXS) * (S / V_mead - F_SP) / (
+                        ((1.05 / 0.79) * rho_eth) * (1 + (MW_CO2 / MW_eth))
+                    )
                     SG = np.maximum(SG, SG_min)
                     return SG, sol.t
-                except:
+                except Exception:
                     return np.full_like(t_eval, np.nan), t_eval
 
             def objective(params):
@@ -713,8 +774,13 @@ def show_fermentation_tracking_screen(root):
                     return np.inf
                 return np.sum((SG_pred - np.array(sgs)) ** 2)
 
-            result = differential_evolution(objective, bounds=[(0.001, 5), (0.01, 50)],
-                                        strategy='best1bin', maxiter=500, polish=True)
+            result = differential_evolution(
+                objective,
+                bounds=[(0.001, 5), (0.01, 50)],
+                strategy='best1bin',
+                maxiter=500,
+                polish=True,
+            )
 
             if result.success:
                 mu_opt, Ks_opt = result.x
@@ -726,7 +792,7 @@ def show_fermentation_tracking_screen(root):
                 ax2.set_title("Graph 2: Fitted Monod SG Model")
                 ax2.set_xlabel("Time (days)")
                 ax2.set_ylabel("SG")
-                ax2.set_ylim(0.98, SG0*1.05)
+                ax2.set_ylim(0.98, SG0 * 1.05)
                 ax2.grid(True)
                 ax2.legend()
 
@@ -742,7 +808,7 @@ def show_fermentation_tracking_screen(root):
                         abv_monod_label.config(text=f"Monod ABV: {abv_monod:.2f}%")
                     except Exception:
                         abv_monod_label.config(text="Monod ABV: —")
-                except:
+                except Exception:
                     sg_monod_label.config(text="Monod SG: —")
                     abv_monod_label.config(text="Monod ABV: —")
             else:
@@ -765,11 +831,11 @@ def show_fermentation_tracking_screen(root):
                 else:
                     sg_logistic_label.config(text="Logistic SG: —")
                     abv_logistic_label.config(text="Logistic ABV: —")
-            except:
+            except Exception:
                 sg_logistic_label.config(text="Logistic SG: —")
                 abv_logistic_label.config(text="Logistic ABV: —")
 
-            canvas.draw()
+            plot_canvas.draw()
 
         except Exception as e:
             tk.messagebox.showerror("Error", str(e))
@@ -779,19 +845,23 @@ def show_fermentation_tracking_screen(root):
             abv_monod_label.config(text="Monod ABV: —")
 
     # Bottom Buttons
-    ttk.Button(left_frame, text="Calculate", command=calculate_graphs, bootstyle="success large").grid(row=7, column=0, columnspan=2, pady=10)
+    ttk.Button(left_frame, text="Calculate",
+               command=calculate_graphs, bootstyle="success large")\
+        .grid(row=7, column=0, columnspan=2, pady=10)
 
-    # inital concentration of yeast
-
+    # Initial concentration of yeast
     ttk.Label(left_frame, text="Mass of yeast added (g)").grid(row=8, column=0, pady=5)
     mass_of_yeast = ttk.Entry(left_frame, width=10)
     mass_of_yeast.grid(row=8, column=1, padx=5)
+
     ttk.Label(left_frame, text="Volume of mead being made (L)").grid(row=10, column=0)
     volume_of_mead = ttk.Entry(left_frame, width=10)
     volume_of_mead.grid(row=10, column=1, pady=10)
 
-        # Time prediction input
-    ttk.Label(left_frame, text="Predict SG at time:").grid(row=11, column=0, padx=5, pady=(15, 2), sticky="w")
+    # Time prediction input
+    ttk.Label(left_frame, text="Predict SG at time:").grid(
+        row=11, column=0, padx=5, pady=(15, 2), sticky="w"
+    )
     predict_time_entry = ttk.Entry(left_frame, width=10)
     predict_time_entry.grid(row=11, column=1, padx=5, pady=(15, 2))
 
@@ -801,7 +871,7 @@ def show_fermentation_tracking_screen(root):
     sg_monod_label = ttk.Label(left_frame, text="Monod SG: —")
     sg_monod_label.grid(row=13, column=0, columnspan=2, sticky="w", padx=5)
 
-    # NEW — ABV labels based on HMRC method
+    # ABV labels based on ABV helper
     abv_logistic_label = ttk.Label(left_frame, text="Logistic ABV: —")
     abv_logistic_label.grid(row=14, column=0, columnspan=2, sticky="w", padx=5)
 
@@ -810,7 +880,16 @@ def show_fermentation_tracking_screen(root):
 
     btn_frame = ttk.Frame(root)
     btn_frame.pack(pady=10)
-    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root), bootstyle="success large").pack()
+    ttk.Button(btn_frame, text="Back", width=20,
+               command=lambda: show_home_screen(root), bootstyle="success large").pack()
+
+
+
+
+
+
+
+
 
 
 
@@ -836,13 +915,19 @@ def show_backsweetening_calculation_screen(root):
 
     # --- Form section on the left ---
     ttk.Label(form, text="Final Gravity reading:").grid(row=0, column=0, sticky="w", pady=(0, 2))
-    ttk.Entry(form, textvariable=final_gravity, width=30).grid(row=1, column=0, pady=(0, 10), sticky="ew")
+    ttk.Entry(form, textvariable=final_gravity, width=30).grid(
+        row=1, column=0, pady=(0, 10), sticky="ew"
+    )
 
     ttk.Label(form, text="Target Gravity:").grid(row=2, column=0, sticky="w", pady=(0, 2))
-    ttk.Entry(form, textvariable=desired_gravity, width=30).grid(row=3, column=0, pady=(0, 10), sticky="ew")
+    ttk.Entry(form, textvariable=desired_gravity, width=30).grid(
+        row=3, column=0, pady=(0, 10), sticky="ew"
+    )
 
     ttk.Label(form, text="Volume of mead (L):").grid(row=4, column=0, sticky="w", pady=(0, 2))
-    ttk.Entry(form, textvariable=volume_l, width=30).grid(row=5, column=0, pady=(0, 10), sticky="ew")
+    ttk.Entry(form, textvariable=volume_l, width=30).grid(
+        row=5, column=0, pady=(0, 10), sticky="ew"
+    )
 
     ttk.Label(form, text="Select Honey:").grid(row=6, column=0, sticky="w", pady=(10, 2))
     honey_combo = ttk.Combobox(form, textvariable=selected_honey, state="readonly", width=28)
@@ -869,11 +954,12 @@ def show_backsweetening_calculation_screen(root):
         for c, h in enumerate(headers):
             ttk.Label(honey_frame, text=h, font=("Arial", 10, "bold")).grid(row=0, column=c, padx=5)
         for i, h in enumerate(honey_data):
-            ttk.Label(honey_frame, text=h["Name"]).grid(row=i+1, column=0)
-            ttk.Label(honey_frame, text=h["Sugar"]).grid(row=i+1, column=1)
-            ttk.Label(honey_frame, text=h["Density"]).grid(row=i+1, column=2)
-            ttk.Label(honey_frame, text=h.get("Cost", "N/A")).grid(row=i+1, column=3)
-            ttk.Button(honey_frame, text="Delete", command=lambda i=i: delete_honey(i)).grid(row=i+1, column=4)
+            ttk.Label(honey_frame, text=h["Name"]).grid(row=i + 1, column=0)
+            ttk.Label(honey_frame, text=h["Sugar"]).grid(row=i + 1, column=1)
+            ttk.Label(honey_frame, text=h["Density"]).grid(row=i + 1, column=2)
+            ttk.Label(honey_frame, text=h.get("Cost", "N/A")).grid(row=i + 1, column=3)
+            ttk.Button(honey_frame, text="Delete", command=lambda i=i: delete_honey(i))\
+                .grid(row=i + 1, column=4)
 
     def delete_honey(i):
         del honey_data[i]
@@ -899,8 +985,12 @@ def show_backsweetening_calculation_screen(root):
             fraction_fermentable = 0.925
 
             imaginary_ABV_for_desired_final_sweetness = abv_hmrc(target_gravity, final_gravity_reading)
-            mass_ethanol_sweetening = ((V / 1000) * rho_eth * imaginary_ABV_for_desired_final_sweetness) / 100
-            mass_sugar_needed = ((1 / (1 - Y_xs)) * (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) + F_sp * V) * 1000)
+            mass_ethanol_sweetening = ((V / 1000) * rho_eth *
+                                       imaginary_ABV_for_desired_final_sweetness) / 100
+            mass_sugar_needed = (
+                (1 / (1 - Y_xs)) *
+                (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) + F_sp * V) * 1000
+            )
 
             selected = selected_honey.get()
             honey = next((h for h in honey_data if h["Name"] == selected), None)
@@ -939,8 +1029,19 @@ Mass of honey needed: {mass_honey_needed:.2f} g
         except Exception as e:
             tk.messagebox.showerror("Error", f"Invalid input:\n{e}")
 
-    ttk.Button(btn_frame, text="Calculate", width=20, command=calculate_backsweetening).pack(pady=5)
-    ttk.Button(btn_frame, text="Back", width=20, command=lambda: show_home_screen(root)).pack()
+    ttk.Button(btn_frame, text="Calculate", width=20,
+               command=calculate_backsweetening).pack(pady=5)
+    ttk.Button(btn_frame, text="Back", width=20,
+               command=lambda: show_home_screen(root)).pack()
+
+
+
+
+
+
+
+
+
 
 def main():
     root = tk.Tk()
@@ -969,4 +1070,5 @@ def main():
 if __name__ == "__main__":
     main()
 
-# python -m PyInstaller --noconfirm --onefile --windowed --icon="mead_calculation_icon.ico" --collect-submodules=numpy --collect-submodules=scipy "Homebrewing calculator.py"
+# python -m PyInstaller --noconfirm --onefile --windowed --icon="mead_calculation_icon.ico" \
+#   --collect-submodules=numpy --collect-submodules=scipy "Homebrewing calculator.py"
