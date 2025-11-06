@@ -19,7 +19,59 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 
+def _to_points(x: float | int) -> int:
+    """Normalize SG/points to gravity points."""
+    x = float(x)
+    if x < 2.0:        # 1.040 -> 40
+        return int(round((x - 1.0) * 1000))
+    if x >= 1000.0:    # 1040 -> 40
+        return int(round(x - 1000.0))
+    return int(round(x))  # already points
 
+# --- ABV helpers using closed-form equation ---
+# ABV(%) = (OG - FG) / (A0 - A1 * OG)
+# with OG, FG as hydrometer SG in 1.xxx form.
+
+A0 = 0.1029394336      # adjust if your constant is slightly different
+A1 = 0.00263418558     # coefficient multiplying OG
+
+
+def abv_simple(og_sg: float, fg_sg: float) -> float:
+    """
+    ABV (%) from original and final gravity using the closed-form equation:
+
+        ABV = (OG - FG) / (A0 - A1 * OG)
+
+    where OG and FG are specific gravity readings in 1.xxx format.
+    """
+    og = float(og_sg)
+    fg = float(fg_sg)
+    denom = A0 - A1 * og
+    return (og - fg) / denom
+
+
+def abv_hmrc(og: float | int, fg: float | int, *, max_iter: int = 6) -> float:
+    """
+    Backwards-compatible wrapper: keep the old function name but
+    delegate to abv_simple(). 'max_iter' is ignored now.
+    """
+    return abv_simple(float(og), float(fg))
+
+
+def og_for_target_abv(fg_sg: float, abv_target: float, *, max_iter: int = 12) -> float:
+    """
+    Given target ABV (%) and final gravity (SG), solve analytically for OG (SG)
+    from the same equation used in abv_simple.
+
+    Starting from:
+        ABV = (OG - FG) / (A0 - A1 * OG)
+
+    rearrange to:
+        OG = (ABV * A0 + FG) / (1 + ABV * A1)
+    """
+    fg = float(fg_sg)
+    abv = float(abv_target)
+    return (abv * A0 + fg) / (1.0 + abv * A1)
 
 HONEY_DATA_FILE = "honey_data.json"
 YEAST_DATA_FILE = "yeast_data.json"
@@ -265,7 +317,7 @@ def show_output_window(root):
         fraction_fermentable = 0.925
 
         # Gravity and sugar calculations
-        starting_gravity = ((ABV_desired * 0.79) / (100 * 1.05) + 1)
+        starting_gravity = og_for_target_abv(final_gravity_desired, ABV_desired)
         mass_ethanol = ((volume_l / 1000) * rho_eth * ABV_desired) / 100
         total_sugar_needed = ((1 / (1 - Y_xs)) * (mass_ethanol * (1 + (MW_CO2 / MW_eth)) +
                      F_sp * volume_l) * 1000)
@@ -294,7 +346,7 @@ def show_output_window(root):
             m_fermaid_o = None
 
         # Back-sweetening calculation
-        imaginary_ABV_for_desired_final_sweetness = (1.05 / 0.79) * ((final_gravity_desired - 1) / 1) * 100
+        imaginary_ABV_for_desired_final_sweetness = abv_hmrc(final_gravity_desired, 1.000)
         mass_ethanol_sweetening = ((volume_l / 1000) * rho_eth * imaginary_ABV_for_desired_final_sweetness) / 100
         mass_pure_sugar_needed_for_sweetening = ((1 / (1 - Y_xs)) * (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) +
                      F_sp * volume_l) * 1000)
@@ -416,13 +468,15 @@ def show_ABV_calculation_screen(root):
             starting_gravity_calc = float(starting_gravity.get())
             final_gravity_calc = float(final_gravity.get())
 
-            ABV = (1.05/0.79) * ((starting_gravity_calc - final_gravity_calc)/(final_gravity_calc)) * 100
+            abv = abv_hmrc(starting_gravity_calc, final_gravity_calc)
+            f_used = hmrc_factor_from_abv(abv)
 
             result = f"""
 Starting Gravity: {starting_gravity_calc}
 Final Gravity: {final_gravity_calc}
 
-%ABV calculated: {ABV:.3f} %
+%ABV calculated: {abv:.3f} %
+Factor used (f): {f_used:.3f}
 """
 
             output = tk.Toplevel(root)
@@ -683,25 +737,46 @@ def show_fermentation_tracking_screen(root):
                     if np.isnan(SG_pred[-1]):
                         raise ValueError
                     sg_monod_label.config(text=f"Monod SG: {SG_pred[-1]:.4f}")
+                    try:
+                        abv_monod = abv_hmrc(SG0, float(SG_pred[-1]))
+                        abv_monod_label.config(text=f"Monod ABV: {abv_monod:.2f}%")
+                    except Exception:
+                        abv_monod_label.config(text="Monod ABV: —")
                 except:
                     sg_monod_label.config(text="Monod SG: —")
+                    abv_monod_label.config(text="Monod ABV: —")
             else:
                 ax2.clear()
                 ax2.text(0.1, 0.5, "Monod fit failed", color='red')
                 sg_monod_label.config(text="Monod SG: —")
+                abv_monod_label.config(text="Monod ABV: —")
 
             # Predict SG from Logistic model
             try:
                 predict_time = float(predict_time_entry.get())
-                sg_log = SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (predict_time - t0)))
-                sg_logistic_label.config(text=f"Logistic SG: {sg_log:.4f}")
+                if logistic_ok:
+                    sg_log = SG_min + (SG_max - SG_min) / (1 + np.exp(-k * (predict_time - t0)))
+                    sg_logistic_label.config(text=f"Logistic SG: {sg_log:.4f}")
+                    try:
+                        abv_log = abv_hmrc(SG0, float(sg_log))
+                        abv_logistic_label.config(text=f"Logistic ABV: {abv_log:.2f}%")
+                    except Exception:
+                        abv_logistic_label.config(text="Logistic ABV: —")
+                else:
+                    sg_logistic_label.config(text="Logistic SG: —")
+                    abv_logistic_label.config(text="Logistic ABV: —")
             except:
                 sg_logistic_label.config(text="Logistic SG: —")
+                abv_logistic_label.config(text="Logistic ABV: —")
 
             canvas.draw()
 
         except Exception as e:
             tk.messagebox.showerror("Error", str(e))
+            sg_logistic_label.config(text="Logistic SG: —")
+            abv_logistic_label.config(text="Logistic ABV: —")
+            sg_monod_label.config(text="Monod SG: —")
+            abv_monod_label.config(text="Monod ABV: —")
 
     # Bottom Buttons
     ttk.Button(left_frame, text="Calculate", command=calculate_graphs, bootstyle="success large").grid(row=7, column=0, columnspan=2, pady=10)
@@ -726,6 +801,12 @@ def show_fermentation_tracking_screen(root):
     sg_monod_label = ttk.Label(left_frame, text="Monod SG: —")
     sg_monod_label.grid(row=13, column=0, columnspan=2, sticky="w", padx=5)
 
+    # NEW — ABV labels based on HMRC method
+    abv_logistic_label = ttk.Label(left_frame, text="Logistic ABV: —")
+    abv_logistic_label.grid(row=14, column=0, columnspan=2, sticky="w", padx=5)
+
+    abv_monod_label = ttk.Label(left_frame, text="Monod ABV: —")
+    abv_monod_label.grid(row=15, column=0, columnspan=2, sticky="w", padx=5)
 
     btn_frame = ttk.Frame(root)
     btn_frame.pack(pady=10)
@@ -817,7 +898,7 @@ def show_backsweetening_calculation_screen(root):
             F_sp = 0.0128
             fraction_fermentable = 0.925
 
-            imaginary_ABV_for_desired_final_sweetness = (1.05 / 0.79) * ((target_gravity - final_gravity_reading) / final_gravity_reading) * 100
+            imaginary_ABV_for_desired_final_sweetness = abv_hmrc(target_gravity, final_gravity_reading)
             mass_ethanol_sweetening = ((V / 1000) * rho_eth * imaginary_ABV_for_desired_final_sweetness) / 100
             mass_sugar_needed = ((1 / (1 - Y_xs)) * (mass_ethanol_sweetening * (1 + (MW_CO2 / MW_eth)) + F_sp * V) * 1000)
 
